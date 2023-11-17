@@ -21,7 +21,6 @@ yarn or npm install --legacy-peer-deps
 4. Create a new branch for your changes:
 
 ```sh
-Copy code
 git checkout -b feature/your-feature-name
 Make the necessary changes and create a new pull request.
 ```
