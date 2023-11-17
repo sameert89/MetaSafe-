@@ -8,20 +8,29 @@ import {
   ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
-import * as rs from "../reedSolomon.js";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as tf from "@tensorflow/tfjs";
 import { useRouter } from "expo-router";
-import { bundleResourceIO } from "tfjs-react-native-para-patch";
-import { exifIndexMap, reverseExifMap } from "../constants/mappings.js";
+import { bundleResourceIO, decodeJpeg } from "tfjs-react-native-para-patch";
+import { reverseExifMap, tensorToImageUrl } from "../constants/mappings.js";
 import { AES } from "crypto-js";
+const {
+  ReedSolomonDecoder,
+  ReedSolomonEncoder,
+  GenericGF,
+} = require("../reedSolomon.js");
+const msgpack = require("msgpack-lite");
 const modelJSON = require("../assets/neuralnets/encoder/model.json");
 const modelWeights = require("../assets/neuralnets/encoder/group1-shard1of1.bin");
 
+const eccBytes = 16;
+
 function RS(messageLength, errorCorrectionLength) {
   var dataLength = messageLength - errorCorrectionLength;
-  var encoder = new rs.ReedSolomonEncoder(rs.GenericGF.AZTEC_DATA_8());
-  var decoder = new rs.ReedSolomonDecoder(rs.GenericGF.AZTEC_DATA_8());
+  var encoder = new ReedSolomonEncoder(GenericGF.AZTEC_DATA_8());
+  var decoder = new ReedSolomonDecoder(GenericGF.AZTEC_DATA_8());
   return {
     dataLength: dataLength,
     messageLength: messageLength,
@@ -36,11 +45,6 @@ function RS(messageLength, errorCorrectionLength) {
     },
   };
 }
-
-//TODO: Read the image from the user -> convert to 128x128x3 -> read userData-> read metaData and
-//filter according to settings and store in a js object -> stringify the object
-//-> apply aes 128 using the key -> apply msgpack compression -> apply reed
-//solomon -> conver to 32x32 image -> encode into cover -> save
 
 export default function Encoder() {
   const router = useRouter();
@@ -66,32 +70,128 @@ export default function Encoder() {
     loadModel();
   }, []);
 
-  const embedMark = async (exifData) => {
+  const embedMark = async (result) => {
     try {
-      // Read the userData
-      const savedData = await AsyncStorage.getItem("userData");
-      // filter the provided exifData
+      if (!result) console.log("fucked");
+      const exifData = result.exif;
+      let coverURI = result.uri;
+      const cropSize = {
+        x: 0,
+        y: 0,
+        height: result.height,
+        width: result.width,
+      };
+      console.log("read-successful", exifData, coverURI);
+      //=> Read the userData
+      const savedData = JSON.parse(await AsyncStorage.getItem("userData"));
+      console.log("userData loaded", savedData);
+      //=> filter the provided exifData
       const finalExifData = {};
       for (const key in exifData) {
-        if (savedData.metaSettings[reverseExifMap[key]])
-          finalExifData[key] = exifDatap[key];
+        if (
+          reverseExifMap.hasOwnProperty(key) &&
+          savedData &&
+          savedData.metaSettings &&
+          savedData.metaSettings[reverseExifMap[key]]
+        ) {
+          finalExifData[reverseExifMap[key]] = exifData[key];
+        }
       }
-      // stringify
-      finalExifData = JSON.stringify(finalExifData);
-      // apply aes 128
+      console.log("filter successful", finalExifData);
+      //=> stringify
+      const exifString = JSON.stringify(finalExifData);
+      console.log("stringify done");
+      //=> apply aes 128
+      const encryptedString = AES.encrypt(exifString, savedData.key).toString();
+      console.log("encryption done", encryptedString);
+      //=> apply msgpack compression
+      const compressedBuffer = msgpack.encode(encryptedString);
+      console.log("buffer", compressedBuffer);
+      //=> convert the buffer to uint8 array
+      let msgpackArray = new Uint8Array(
+        Object.keys(compressedBuffer).length + eccBytes
+      ).fill(0);
+      let i = 0;
+      for (const key in compressedBuffer) {
+        msgpackArray[i] = compressedBuffer[key];
+        i++;
+      }
+      //=> apply reed solomon redundancy
+      var ec = RS(msgpackArray.length, eccBytes);
+      ec.encode(msgpackArray);
+      console.log("ECC done", msgpackArray);
+      console.log("Total Bits: ", msgpackArray.length * 8);
+      //=> convert into binary array
+      const binaryArray = [];
+      for (let i = 0; i < msgpackArray.length; i++) {
+        for (let j = 0; j < 8; j++) {
+          binaryArray.push((msgpackArray[i] >> j) & 1);
+        }
+      }
+      //=> pad zeroes at the end
+      while (binaryArray.length < 1024) binaryArray.push(0);
+      let watermarkTensor = tf.tensor3d(binaryArray, [32, 32, 1]);
+      watermarkTensor = tf.expandDims(watermarkTensor, 0);
+      console.log("markTensorReady!", watermarkTensor);
+      //=> process the cover image using photoManip
+      const processedCover = await ImageManipulator.manipulateAsync(
+        coverURI,
+        [
+          {
+            resize: {
+              height: 128,
+              width: 128,
+            },
+          },
+        ],
+        {
+          base64: true,
+          compress: 1, // No compression
+        }
+      );
+      coverURI = processedCover.uri;
+      //=> load the cover image as tensor
+      const response = processedCover.base64;
+      const imgBuffer = tf.util.encodeString(response, "base64").buffer;
+      const raw = new Uint8Array(imgBuffer);
+      let coverTensor = decodeJpeg(raw);
+      coverTensor = tf.div(coverTensor, 255.0);
+      coverTensor = tf.expandDims(coverTensor, 0);
+
+      //=> apply the encoder model
+      let watermarkedTensor = await model.predict([
+        watermarkTensor,
+        coverTensor,
+      ]);
+
+      //=> convert it back to image
+      watermarkedTensor = tf.squeeze(watermarkedTensor, 0);
+      watermarkedTensor = tf.mul(watermarkedTensor, 255.0);
+      watermarkedTensor = tf.cast(watermarkedTensor, "int32");
+      watermarkedTensor = tf.clipByValue(watermarkedTensor, 0, 255);
+
+      console.log("Encoding Complete", watermarkedTensor);
+
+      console.log("These are the pixels", watermarkedTensor);
+      const res = await tensorToImageUrl(watermarkedTensor);
+      const imageUri = "data:image/jpeg;base64," + res;
+      console.log(imageUri);
+      setImage(imageUri);
+      const x = tf.util.encodeString(res, "base64").buffer;
+      const y = new Uint8Array(x);
+      console.log("hi");
+      const z = decodeJpeg(y);
+      tf.reduce_mean(tf.metrics.meanSquaredError(z, watermarkedTensor)).print();
     } catch (e) {
       alert(e);
+    } finally {
+      coverTensor.dispose();
+      watermarkTensor.dispose();
+      watermarkedTensor.dispose();
+      z.dispose();
     }
-
-    const dummy = {
-      1: 2500,
-      2: 4500,
-      3: 1.11023,
-      4: "SameerTrivedi",
-      5: 1.123123,
-      13: 123123,
-    };
   };
+
   const pickImage = async () => {
     // No permissions request is necessary for launching the image library
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -103,7 +203,8 @@ export default function Encoder() {
     });
 
     if (!result.canceled) {
-      embedMark();
+      console.log(result);
+      embedMark(result);
     }
   };
   const captureImage = async () => {
@@ -115,7 +216,7 @@ export default function Encoder() {
     });
 
     if (!result.canceled) {
-      embedMark();
+      embedMark(result);
     }
   };
 
@@ -124,7 +225,7 @@ export default function Encoder() {
       {isLoading ? (
         <ActivityIndicator />
       ) : (
-        <View>
+        <View style={styles.container}>
           <TouchableOpacity style={styles.button} onPress={pickImage}>
             <Text style={styles.buttonText}>Select from Gallery</Text>
           </TouchableOpacity>
@@ -143,6 +244,10 @@ export default function Encoder() {
   );
 }
 const styles = StyleSheet.create({
+  container: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
   button: {
     backgroundColor: "#222",
     borderRadius: 8,

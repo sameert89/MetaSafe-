@@ -1,3 +1,33 @@
+import * as tf from "@tensorflow/tfjs";
+import * as jpeg from "jpeg-js";
+
+async function tensorToImageUrl(imageTensor) {
+  const [height, width] = imageTensor.shape;
+  const buffer = await imageTensor.toInt().data();
+  const frameData = new Uint8Array(width * height * 4);
+
+  let offset = 0;
+  for (let i = 0; i < frameData.length; i += 4) {
+    frameData[i] = buffer[offset];
+    frameData[i + 1] = buffer[offset + 1];
+    frameData[i + 2] = buffer[offset + 2];
+    frameData[i + 3] = 0xff;
+
+    offset += 3;
+  }
+
+  const rawImageData = {
+    data: frameData,
+    width,
+    height,
+  };
+  const jpegImageData = jpeg.encode(rawImageData, 100);
+  const base64Encoding = tf.util.decodeString(jpegImageData.data, "base64");
+  return base64Encoding;
+}
+
+// TODO: Convert JPEG to png lossless format to avoid compression.
+
 const exifIndexMap = [
   "Artist",
   "Model",
@@ -71,4 +101,4 @@ const reverseExifMap = {
   GPSImgDirectionRef: 31,
 };
 
-export { exifIndexMap, reverseExifMap };
+export { exifIndexMap, reverseExifMap, tensorToImageUrl };

@@ -379,6 +379,7 @@ ReedSolomonEncoder.prototype = {
       throw new Error('IllegalArgumentException("No error correction bytes")');
     }
     var dataBytes = toEncode.length - ecBytes;
+    console.log(toEncode.length, ecBytes);
     if (dataBytes <= 0) {
       throw new Error('IllegalArgumentException("No data bytes provided")');
     }
@@ -555,9 +556,6 @@ ReedSolomonDecoder.prototype = {
   },
 };
 
-// System.arraycopy(src, srcPos, dest, destPos, length);
-// dest.set(src.subarray(srcPos, srcPos + length), destPos);
-
 function lazy(func) {
   var val;
   return function () {
@@ -597,3 +595,9 @@ this.ReedSolomonDecoder = ReedSolomonDecoder;
 function dump(array) {
   console.log(Array.prototype.join.call(array));
 }
+
+module.exports = {
+  ReedSolomonDecoder: ReedSolomonDecoder,
+  ReedSolomonEncoder: ReedSolomonEncoder,
+  GenericGF: GenericGF,
+};
