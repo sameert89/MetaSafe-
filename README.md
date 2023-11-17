@@ -6,15 +6,15 @@ Welcome to the official codebase of MetaSafe Capture, an application designed fo
 
 1. Clone the repository locally or download the code as a .zip file and extract it.
 
-   ```sh
-   git clone https://github.com/sameert89/MetaSafe-.git
-   ```
+```sh
+git clone https://github.com/sameert89/MetaSafe-.git
+```
 
-````
 2. Install the Dependencies
+
 ```sh
 yarn or npm install --legacy-peer-deps
-````
+```
 
 3. Tackle items from the todo list, address open issues, or create a new issue via the issues tab.
 
