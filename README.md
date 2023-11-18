@@ -29,8 +29,8 @@ Make the necessary changes and create a new pull request.
 
 ## 📝 TODO
 
-- Change the tensor to JPEG conversion (lossy) to PNG (lossless).
-- Implement Crop and Overlay Mechanics for the Covers.
+- ~Change the tensor to JPEG conversion (lossy) to PNG (lossless)~
+- Implement Crop and Overlay Mechanics for the Covers in the encoder.
 - Implement The Decoder.
 - Implement Saving of Images.
 - Finish FAQ.

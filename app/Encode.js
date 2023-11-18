@@ -14,7 +14,11 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as tf from "@tensorflow/tfjs";
 import { useRouter } from "expo-router";
 import { bundleResourceIO, decodeJpeg } from "tfjs-react-native-para-patch";
-import { reverseExifMap, tensorToImageUrl } from "../constants/mappings.js";
+import {
+  reverseExifMap,
+  tensorToImageUrl,
+  encodePng,
+} from "../constants/mappings.js";
 import { AES } from "crypto-js";
 const {
   ReedSolomonDecoder,
@@ -173,15 +177,15 @@ export default function Encoder() {
       console.log("Encoding Complete", watermarkedTensor);
 
       console.log("These are the pixels", watermarkedTensor);
-      const res = await tensorToImageUrl(watermarkedTensor);
-      const imageUri = "data:image/jpeg;base64," + res;
-      console.log(imageUri);
-      setImage(imageUri);
-      const x = tf.util.encodeString(res, "base64").buffer;
-      const y = new Uint8Array(x);
-      console.log("hi");
-      const z = decodeJpeg(y);
-      tf.reduce_mean(tf.metrics.meanSquaredError(z, watermarkedTensor)).print();
+      const res = await encodePng(watermarkedTensor);
+      console.log("base64 done");
+      // const imageUri = "data:image/jpeg;base64," + res;
+      console.log(res);
+      setImage(res);
+      // const x = tf.util.encodeString(res, "base64").buffer;
+      // const y = new Uint8Array(x);
+      // console.log("hi");
+      // const z = decodeJpeg(y);
     } catch (e) {
       alert(e);
     } finally {
