@@ -76,7 +76,7 @@ export default function Encoder() {
 
   const embedMark = async (result) => {
     try {
-      if (!result) console.log("fucked");
+      if (!result) console.log("unsuccesful");
       const exifData = result.exif;
       let coverURI = result.uri;
       const cropSize = {
@@ -163,11 +163,14 @@ export default function Encoder() {
       coverTensor = tf.expandDims(coverTensor, 0);
 
       //=> apply the encoder model
+      const timeBegin = performance.now();
       let watermarkedTensor = await model.predict([
         watermarkTensor,
         coverTensor,
       ]);
-
+      const timeTaken = performance.now() - timeBegin;
+      alert("Encoding Time: ", timeTaken);
+      console.log("Network Encode Runtime: ", timeTaken);
       //=> convert it back to image
       watermarkedTensor = tf.squeeze(watermarkedTensor, 0);
       watermarkedTensor = tf.mul(watermarkedTensor, 255.0);

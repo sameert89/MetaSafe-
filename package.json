@@ -13,6 +13,9 @@
     "@react-native-community/checkbox": "^0.5.16",
     "@ronomon/reed-solomon": "^6.0.0",
     "@tensorflow/tfjs": "^4.13.0",
+    "@tensorflow/tfjs-backend-cpu": "^4.13.0",
+    "@tensorflow/tfjs-backend-webgl": "^4.13.0",
+    "@tensorflow/tfjs-core": "^4.13.0",
     "@tensorflow/tfjs-react-native": "^0.8.0",
     "axios": "^1.6.1",
     "base-64": "^1.0.0",
@@ -50,7 +53,8 @@
     "react-native-screens": "~3.22.0",
     "react-native-tensorflow": "^0.1.8",
     "react-native-web": "~0.19.6",
-    "tfjs-react-native-para-patch": "^0.0.4"
+    "tfjs-react-native-para-patch": "^0.0.4",
+    "yarn": "^1.22.21"
   },
   "devDependencies": {
     "@babel/core": "^7.19.3",
